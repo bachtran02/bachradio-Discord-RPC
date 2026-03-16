@@ -1,18 +1,14 @@
-﻿using System;
-using System.Windows.Forms;
-using Websocket.Client;
 using DiscordRPC;
-using MusicCat.Rpc.Models;
-using MusicCat.Rpc.Services;
+using BachRadio.Rpc.Models;
+using BachRadio.Rpc.Services;
 
-namespace MusicCat.Rpc;
+namespace BachRadio.Rpc;
 
 class Program
 {
     public const string DISCORD_APP_ID = "1275296537991319553";
-    public const string MUSICCAT_WEBSOCKET_URL = "wss://bachtran.dev:7443/tracker-websocket";
+    public const string MUSIC_STATUS_URL = "https://bachtran.dev/api/music";
 
-    private static readonly Uri WsUrl = new(MUSICCAT_WEBSOCKET_URL);
     private static DiscordRpcClient? _discordClient;
     private static readonly StatusBuffer _buffer = new();
     private static MusicStatus? _previousStatus;
@@ -29,11 +25,11 @@ class Program
         {
             Icon = SystemIcons.Application,
             Visible = true,
-            Text = "MusicCat RPC - Starting..."
+            Text = "BachRadio RPC - Starting..."
         };
 
         var contextMenu = new ContextMenuStrip();
-        var exitMenuItem = new ToolStripMenuItem("Exit", null, (s, e) => 
+        var exitMenuItem = new ToolStripMenuItem("Exit", null, (s, e) =>
         {
             Application.Exit();
         });
@@ -45,27 +41,21 @@ class Program
         _discordClient.Initialize();
         UpdateTrayIcon("Connected to Discord");
 
-        // 2. Setup WebSocket (run async setup on background thread)
-        WebsocketClient? wsClient = null;
+        // 2. Start HTTP polling loop
         Task.Run(async () =>
         {
-            try
+            using var http = new HttpClient();
+            while (true)
             {
-                wsClient = new WebsocketClient(WsUrl)
+                try
                 {
-                    ReconnectTimeout = TimeSpan.FromSeconds(30)
-                };
+                    var json = await http.GetStringAsync(MUSIC_STATUS_URL);
+                    var status = System.Text.Json.JsonSerializer.Deserialize<MusicStatus>(json);
 
-                wsClient.MessageReceived.Subscribe(msg =>
-                {
-                    if (string.IsNullOrEmpty(msg.Text)) return;
-                    
-                    var status = System.Text.Json.JsonSerializer.Deserialize<MusicStatus>(msg.Text);
                     if (status != null)
                     {
                         _buffer.Update(status);
-                        
-                        // Check if track info changed
+
                         if (HasTrackStatusChanged(_previousStatus, status))
                         {
                             UpdatePresence();
@@ -73,22 +63,13 @@ class Program
                             _previousStatus = status;
                         }
                     }
-                });
-
-                await wsClient.Start();
-                UpdateTrayIcon("WebSocket connected");
-
-                // Start Update Loop (for timestamp updates every 30 seconds)
-                await _buffer.WaitForFirstData;
-                while (true)
-                {
-                    await Task.Delay(TimeSpan.FromSeconds(30));
-                    UpdatePresence();
                 }
-            }
-            catch (Exception ex)
-            {
-                UpdateTrayIcon($"Error: {ex.Message}");
+                catch (Exception ex)
+                {
+                    UpdateTrayIcon($"Error: {ex.Message}");
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(15));
             }
         });
 
@@ -97,7 +78,6 @@ class Program
         {
             _trayIcon?.Dispose();
             _discordClient?.Dispose();
-            wsClient?.Dispose();
         };
 
         Application.Run();
@@ -106,13 +86,10 @@ class Program
     static bool HasTrackStatusChanged(MusicStatus? previous, MusicStatus? current)
     {
         if (previous == null || current == null) return true;
-        if (previous.IsPlaying != current.IsPlaying) return true;
-        if (previous.IsPaused != current.IsPaused) return true;
-        
-        var prevTrack = previous.Track;
-        var currTrack = current.Track;
-        
-        return prevTrack.Uri != currTrack.Uri;
+        if (previous.Playing != current.Playing) return true;
+        if (previous.Paused != current.Paused) return true;
+
+        return previous.Track.Uri != current.Track.Uri;
     }
 
     static void UpdatePresence()
@@ -120,7 +97,7 @@ class Program
         var (status, lastUpdate, hasData) = _buffer.Get();
         if (!hasData || status == null || _discordClient == null) return;
 
-        if (!status.IsPlaying || status.IsPaused)
+        if (!status.Playing || status.Paused)
         {
             _discordClient.ClearPresence();
             return;
@@ -136,15 +113,13 @@ class Program
             Assets = new Assets()
             {
                 LargeImageKey = status.Track.ArtworkUrl,
-                SmallImageKey = status.Track.SourceName,
             }
         };
 
         if (!status.Track.IsStream)
         {
-            // Calculate time logic if not stream
             var elapsed = DateTime.Now - lastUpdate;
-            var start = DateTime.UtcNow.AddMilliseconds(-(status.Track.Position + elapsed.TotalMilliseconds));
+            var start = DateTime.UtcNow.AddMilliseconds(-(status.Position + elapsed.TotalMilliseconds));
             var end = start.AddMilliseconds(status.Track.Length);
             curPresence.Timestamps = new Timestamps(start, end);
         }
@@ -166,7 +141,7 @@ class Program
         var discordStatus = _discordClient?.IsInitialized == true ? "Connected" : "Disconnected";
         string trackInfo;
 
-        if (!status.IsPlaying)
+        if (!status.Playing)
         {
             trackInfo = "Not playing";
         }

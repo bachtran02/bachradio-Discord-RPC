@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MusicCatRpc", "MusicCatRpc.csproj", "{4ED6C848-250F-4467-9E3D-59165452E92F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BachRadioRpc", "BachRadioRpc.csproj", "{4ED6C848-250F-4467-9E3D-59165452E92F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

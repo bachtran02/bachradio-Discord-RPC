@@ -1,7 +1,7 @@
 using System.Threading;
-using MusicCat.Rpc.Models;
+using BachRadio.Rpc.Models;
 
-namespace MusicCat.Rpc.Services;
+namespace BachRadio.Rpc.Services;
 
 public class StatusBuffer : IDisposable
 {

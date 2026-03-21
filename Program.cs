@@ -6,8 +6,9 @@ namespace BachRadio.Rpc;
 
 class Program
 {
-    public const string DISCORD_APP_ID = "1275296537991319553";
-    public const string MUSIC_STATUS_URL = "https://bachtran.dev/api/music";
+    public const string DiscordAppId = "1483207456120377486";
+    public const string MusicStatusUrl = "https://bachtran.dev/api/music";
+    private const long PositionDeltaThresholdMs = 60_000;
 
     private static DiscordRpcClient? _discordClient;
     private static readonly StatusBuffer _buffer = new();
@@ -37,7 +38,7 @@ class Program
         _trayIcon.ContextMenuStrip = contextMenu;
 
         // 1. Setup Discord
-        _discordClient = new DiscordRpcClient(DISCORD_APP_ID);
+        _discordClient = new DiscordRpcClient(DiscordAppId);
         _discordClient.Initialize();
         UpdateTrayIcon("Connected to Discord");
 
@@ -49,7 +50,7 @@ class Program
             {
                 try
                 {
-                    var json = await http.GetStringAsync(MUSIC_STATUS_URL);
+                    var json = await http.GetStringAsync(MusicStatusUrl);
                     var status = System.Text.Json.JsonSerializer.Deserialize<MusicStatus>(json);
 
                     if (status != null)
@@ -89,7 +90,9 @@ class Program
         if (previous.Playing != current.Playing) return true;
         if (previous.Paused != current.Paused) return true;
 
-        return previous.Track.Uri != current.Track.Uri;
+        var positionDeltaMs = Math.Abs(current.Position - previous.Position);
+
+        return previous.Track.Uri != current.Track.Uri || positionDeltaMs > PositionDeltaThresholdMs;
     }
 
     static void UpdatePresence()
